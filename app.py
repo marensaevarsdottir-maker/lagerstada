@@ -4,7 +4,10 @@ import os
 from datetime import datetime
 
 app = Flask(__name__)
-DATABASE = os.path.join(os.path.dirname(__file__), 'lagerstada.db')
+DATABASE = os.environ.get('DB_PATH', os.path.join(os.path.dirname(__file__), 'lagerstada.db'))
+# On Render, use persistent disk at /data
+if os.path.isdir('/data'):
+    DATABASE = '/data/lagerstada.db'
 
 
 def get_db():
