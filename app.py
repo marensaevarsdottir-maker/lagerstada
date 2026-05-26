@@ -1,34 +1,72 @@
-from flask import Flask, render_template, jsonify, request, make_response
-import sqlite3
 import os
+from flask import Flask, render_template, jsonify, request, make_response
 from datetime import datetime
 
 app = Flask(__name__)
-DATABASE = os.environ.get('DB_PATH', os.path.join(os.path.dirname(__file__), 'lagerstada.db'))
-# On Render, use persistent disk at /data
-if os.path.isdir('/data'):
-    DATABASE = '/data/lagerstada.db'
+
+# ── Database setup ────────────────────────────────────────────────────────────
+# Uses PostgreSQL on Render (DATABASE_URL), SQLite locally
+
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+if DATABASE_URL:
+    import psycopg2
+    import psycopg2.extras
+
+    # Render gives 'postgres://' but psycopg2 needs 'postgresql://'
+    if DATABASE_URL.startswith('postgres://'):
+        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+
+    def get_db():
+        conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+        return conn
+
+    PH = '%s'  # PostgreSQL placeholder
+
+    def init_db():
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS items (
+                id         SERIAL PRIMARY KEY,
+                name       TEXT NOT NULL UNIQUE,
+                geymsla    INTEGER NOT NULL DEFAULT 0,
+                ibuad      INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+        cur.close()
+        conn.close()
+
+else:
+    import sqlite3
+    DATABASE = os.path.join(os.path.dirname(__file__), 'lagerstada.db')
+
+    def get_db():
+        conn = sqlite3.connect(DATABASE)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    PH = '?'  # SQLite placeholder
+
+    def init_db():
+        conn = get_db()
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS items (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT    NOT NULL UNIQUE,
+                geymsla     INTEGER NOT NULL DEFAULT 0,
+                ibuad       INTEGER NOT NULL DEFAULT 0,
+                updated_at  TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+        conn.close()
 
 
-def get_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def init_db():
-    conn = get_db()
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS items (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            name        TEXT    NOT NULL UNIQUE,
-            geymsla     INTEGER NOT NULL DEFAULT 0,
-            ibuad       INTEGER NOT NULL DEFAULT 0,
-            updated_at  TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    conn.commit()
-    conn.close()
+def row_to_dict(row):
+    return dict(row)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -44,13 +82,14 @@ def index():
 @app.route('/api/items', methods=['GET'])
 def get_items():
     conn = get_db()
-    rows = conn.execute(
-        'SELECT * FROM items ORDER BY name COLLATE NOCASE'
-    ).fetchall()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM items ORDER BY name')
+    rows = cur.fetchall()
+    cur.close()
     conn.close()
     result = []
     for row in rows:
-        d = dict(row)
+        d = row_to_dict(row)
         d['samtals'] = d['geymsla'] + d['ibuad']
         result.append(d)
     return jsonify(result)
@@ -68,62 +107,75 @@ def add_item():
     now     = datetime.now().isoformat(timespec='seconds')
 
     conn = get_db()
+    cur = conn.cursor()
     try:
-        conn.execute(
-            'INSERT INTO items (name, geymsla, ibuad, updated_at) VALUES (?,?,?,?)',
-            (name, geymsla, ibuad, now)
-        )
+        if DATABASE_URL:
+            cur.execute(
+                f'INSERT INTO items (name, geymsla, ibuad, updated_at) VALUES ({PH},{PH},{PH},{PH}) RETURNING *',
+                (name, geymsla, ibuad, now)
+            )
+            row = cur.fetchone()
+        else:
+            cur.execute(
+                f'INSERT INTO items (name, geymsla, ibuad, updated_at) VALUES ({PH},{PH},{PH},{PH})',
+                (name, geymsla, ibuad, now)
+            )
+            cur.execute('SELECT * FROM items WHERE name=?', (name,))
+            row = cur.fetchone()
         conn.commit()
-        row = conn.execute(
-            'SELECT * FROM items WHERE name=?', (name,)
-        ).fetchone()
+        cur.close()
         conn.close()
-        d = dict(row)
+        d = row_to_dict(row)
         d['samtals'] = d['geymsla'] + d['ibuad']
         return jsonify(d), 201
-    except sqlite3.IntegrityError:
+    except Exception as e:
+        conn.rollback()
+        cur.close()
         conn.close()
-        return jsonify({'error': 'Þessi hlutur er þegar til'}), 409
+        if 'unique' in str(e).lower() or 'UNIQUE' in str(e):
+            return jsonify({'error': 'Þessi hlutur er þegar til'}), 409
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/items/<int:item_id>', methods=['PUT'])
 def update_item(item_id):
     data = request.json or {}
     conn = get_db()
+    cur = conn.cursor()
 
-    # Build dynamic SET clause
     fields, values = [], []
 
     if 'name' in data:
         name = (data['name'] or '').strip()
         if not name:
-            conn.close()
+            cur.close(); conn.close()
             return jsonify({'error': 'Nafn má ekki vera tómt'}), 400
-        fields.append('name=?');    values.append(name)
+        fields.append(f'name={PH}'); values.append(name)
 
     if 'geymsla' in data:
-        fields.append('geymsla=?'); values.append(max(0, int(data['geymsla'])))
+        fields.append(f'geymsla={PH}'); values.append(max(0, int(data['geymsla'])))
 
     if 'ibuad' in data:
-        fields.append('ibuad=?');   values.append(max(0, int(data['ibuad'])))
+        fields.append(f'ibuad={PH}'); values.append(max(0, int(data['ibuad'])))
 
     if not fields:
-        conn.close()
+        cur.close(); conn.close()
         return jsonify({'error': 'Engar breytingar'}), 400
 
-    fields.append('updated_at=?')
+    fields.append(f'updated_at={PH}')
     values.append(datetime.now().isoformat(timespec='seconds'))
     values.append(item_id)
 
-    conn.execute(f'UPDATE items SET {", ".join(fields)} WHERE id=?', values)
+    cur.execute(f'UPDATE items SET {", ".join(fields)} WHERE id={PH}', values)
     conn.commit()
-    row = conn.execute('SELECT * FROM items WHERE id=?', (item_id,)).fetchone()
-    conn.close()
+    cur.execute(f'SELECT * FROM items WHERE id={PH}', (item_id,))
+    row = cur.fetchone()
+    cur.close(); conn.close()
 
     if row is None:
         return jsonify({'error': 'Hlutur fannst ekki'}), 404
 
-    d = dict(row)
+    d = row_to_dict(row)
     d['samtals'] = d['geymsla'] + d['ibuad']
     return jsonify(d)
 
@@ -131,9 +183,10 @@ def update_item(item_id):
 @app.route('/api/items/<int:item_id>', methods=['DELETE'])
 def delete_item(item_id):
     conn = get_db()
-    conn.execute('DELETE FROM items WHERE id=?', (item_id,))
+    cur = conn.cursor()
+    cur.execute(f'DELETE FROM items WHERE id={PH}', (item_id,))
     conn.commit()
-    conn.close()
+    cur.close(); conn.close()
     return jsonify({'success': True})
 
 
