@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="is">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lagerstöðukerfi</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --t-dk2:  #004C4C;
+      --t-dk1:  #006666;
+      --t:      #008080;
+      --t-md:   #1AA7A3;
+      --t-lt1:  #66B2B2;
+      --t-lt2:  #B2D8D8;
+      --p-dk:   #3A5195;
+      --p:      #4A6BB5;
+      --p-lt1:  #8FA5D0;
+      --p-lt2:  #D0DCEF;
+      --bg:     #F0F4F8;
+      --card:   #FFFFFF;
+      --text:   #1A202C;
+      --muted:  #718096;
+      --border: #E2E8F0;
+      --red:    #C53030;
+      --shadow: 0 2px 16px rgba(0,76,76,.08);
+      --shadow-lg: 0 8px 32px rgba(0,76,76,.16);
+      --radius: 14px;
+    }
+
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ── HEADER ─────────────────────────────────── */
+    .header {
+      background: var(--t-dk1);
+      padding: 1.75rem 2rem 1.6rem;
+      text-align: center;
+    }
+    .header h1 {
+      font-size: clamp(1.5rem, 4vw, 2.2rem);
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -.5px;
+    }
+    .header h1 em { color: var(--t-lt1); font-style: normal; font-weight: 300; }
+
+    /* ── CONTAINER ──────────────────────────────── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+
+    /* ── TOOLBAR ─────────────────────────────────── */
+    .toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;
+    }
+    .toolbar-left { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .toolbar h2 { font-size: 1.1rem; font-weight: 700; }
+
+    .search-wrap { position: relative; }
+    .search-wrap input {
+      padding: .55rem .9rem .55rem 2.15rem;
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      font: .875rem/1.4 inherit;
+      outline: none;
+      transition: border-color .2s;
+      width: 220px;
+      background: var(--card);
+    }
+    .search-wrap input:focus { border-color: var(--t); }
+    .s-ico { position: absolute; left: .62rem; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+
+    .btn-add {
+      background: var(--p);
+      color: #fff;
+      border: none;
+      padding: .62rem 1.25rem;
+      border-radius: 10px;
+      font: 700 .875rem/1 inherit;
+      cursor: pointer;
+      display: flex; align-items: center; gap: .4rem;
+      transition: background .15s, transform .1s;
+      white-space: nowrap;
+    }
+    .btn-add:hover { background: var(--p-dk); }
+    .btn-add:active { transform: scale(.97); }
+
+    /* ── ITEM CARDS GRID ─────────────────────────── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+      gap: 1.1rem;
+    }
+
+    .item-card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      transition: transform .18s, box-shadow .18s;
+      display: flex;
+      flex-direction: column;
+    }
+    .item-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+    .item-card.zero { border-top: 3px solid var(--red); }
+    .item-card.zero .ic-loc.g { background: rgba(197,48,48,.07); }
+    .item-card:not(.zero) { border-top: 3px solid var(--t-lt1); }
+
+    /* card header */
+    .ic-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .85rem 1rem .8rem;
+      border-bottom: 1px solid var(--border);
+      gap: .5rem;
+    }
+    .ic-name {
+      border: 2px solid transparent;
+      background: transparent;
+      font: 800 1.15rem/1.3 inherit;
+      color: var(--text);
+      padding: .22rem .4rem;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: border-color .18s, background .18s;
+      flex: 1;
+      min-width: 0;
+    }
+    .ic-name:hover { border-color: var(--border); background: var(--bg); }
+    .ic-name:focus { outline: none; border-color: var(--t); background: var(--bg); cursor: text; }
+
+    .del-btn {
+      width: 30px; height: 30px;
+      background: rgba(197,48,48,.08); color: var(--red);
+      border: none; border-radius: 7px; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background .12s, color .12s;
+    }
+    .del-btn:hover { background: var(--red); color: #fff; }
+
+    /* card body — two columns */
+    .ic-body {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      flex: 1;
+    }
+
+    .ic-loc {
+      padding: 1rem .9rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .55rem;
+    }
+    .ic-loc.g {
+      background: rgba(0,128,128,.05);
+      border-right: 1px solid var(--border);
+    }
+    .ic-loc.i {
+      background: rgba(89,110,239,.06);
+    }
+
+    .ic-loc-label {
+      display: flex; align-items: center; gap: .3rem;
+      font: 700 .7rem/1 inherit;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+    }
+    .ic-loc.g .ic-loc-label { color: var(--t-dk1); }
+    .ic-loc.i .ic-loc-label { color: var(--p-dk); }
+
+    /* qty controls */
+    .qty { display: flex; align-items: center; gap: .35rem; }
+    .qbtn {
+      width: 26px; height: 26px;
+      border: none; border-radius: 6px;
+      font-size: 1rem; font-weight: 700; line-height: 1;
+      cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: background .1s, color .1s;
+    }
+    .qbtn:active { transform: scale(.85); }
+    .qbtn.minus { background: rgba(0,128,128,.13); color: var(--t-dk1); }
+    .qbtn.minus:hover { background: var(--t); color: #fff; }
+    .qbtn.plus  { background: rgba(84,31,199,.10); color: var(--p-dk); }
+    .qbtn.plus:hover  { background: var(--p); color: #fff; }
+
+    .qval {
+      min-width: 32px; text-align: center;
+      font: 700 1rem/1 inherit;
+      background: var(--bg);
+      padding: .26rem .4rem;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      user-select: none;
+    }
+    .qval:hover { border-color: var(--t-lt1); }
+    .qinput {
+      width: 48px; text-align: center;
+      font: 700 1rem/1 inherit;
+      padding: .26rem .28rem;
+      border: 2px solid var(--t);
+      border-radius: 6px;
+      background: var(--bg); outline: none;
+    }
+
+    /* card footer — total */
+    .ic-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .65rem 1rem;
+      border-top: 1px solid var(--border);
+      background: rgba(0,0,0,.012);
+    }
+    .ic-total-lbl {
+      font: 600 .73rem/1 inherit;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: var(--muted);
+    }
+    .ic-total-val {
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--p-dk);
+      color: #fff;
+      font: 800 .9rem/1 inherit;
+      padding: .27rem .85rem;
+      border-radius: 20px;
+      min-width: 44px;
+    }
+    .zero .ic-total-val { background: var(--red); }
+
+    /* ── EMPTY ───────────────────────────────────── */
+    .empty {
+      grid-column: 1 / -1;
+      padding: 4rem 2rem; text-align: center; color: var(--muted);
+    }
+    .empty-ico { opacity: .22; margin-bottom: 1rem; }
+    .empty h3 { font-size: 1rem; font-weight: 700; margin-bottom: .35rem; }
+    .empty p { font-size: .875rem; }
+
+    /* ── MODAL ───────────────────────────────────── */
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.42); backdrop-filter: blur(5px); z-index: 100; align-items: center; justify-content: center; }
+    .overlay.open { display: flex; }
+    .modal { background: var(--card); border-radius: 20px; padding: 2rem; width: min(92%, 400px); box-shadow: var(--shadow-lg); animation: pop .17s cubic-bezier(.34,1.56,.64,1); }
+    @keyframes pop { from { transform: scale(.87); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .modal h3 { font-size: 1.15rem; font-weight: 800; margin-bottom: 1.35rem; color: var(--t-dk1); display: flex; align-items: center; gap: .5rem; }
+    .fg { margin-bottom: 1.05rem; }
+    .fg label { display: block; font: 700 .73rem/1 inherit; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: .38rem; }
+    .fg input { width: 100%; padding: .68rem .9rem; border: 2px solid var(--border); border-radius: 10px; font: 1rem/1.4 inherit; color: var(--text); outline: none; transition: border-color .18s; }
+    .fg input:focus { border-color: var(--t); }
+    .fg input.err { border-color: var(--red); }
+    .fg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .modal-btns { display: flex; gap: .7rem; margin-top: 1.35rem; }
+    .btn-cancel { flex: 1; padding: .68rem; border: 2px solid var(--border); background: transparent; border-radius: 10px; font: 600 .875rem/1 inherit; color: var(--muted); cursor: pointer; transition: all .15s; }
+    .btn-cancel:hover { border-color: var(--muted); color: var(--text); }
+    .btn-save { flex: 2; padding: .68rem; background: var(--t); color: #fff; border: none; border-radius: 10px; font: 700 .875rem/1 inherit; cursor: pointer; transition: background .15s; }
+    .btn-save:hover { background: var(--t-dk1); }
+
+    /* ── TOAST / SAVING ──────────────────────────── */
+    .toasts { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 200; display: flex; flex-direction: column; gap: .4rem; pointer-events: none; }
+    .toast { padding: .62rem .95rem; border-radius: 10px; font: 600 .84rem/1 inherit; color: #fff; box-shadow: var(--shadow-lg); display: flex; align-items: center; gap: .4rem; animation: slideIn .2s ease, fadeOut .3s ease 2.4s forwards; }
+    .toast.ok  { background: var(--t-dk1); }
+    .toast.err { background: var(--red); }
+    @keyframes slideIn { from { transform: translateX(65px); opacity: 0; } to { transform: none; opacity: 1; } }
+    @keyframes fadeOut { to { opacity: 0; } }
+    .saving { position: fixed; top: .9rem; right: .9rem; background: var(--card); border-radius: 9px; padding: .38rem .75rem; font: .73rem/1 inherit; color: var(--muted); box-shadow: var(--shadow); display: none; align-items: center; gap: .38rem; z-index: 50; }
+    .saving.show { display: flex; }
+    .spin { width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--t); border-radius: 50%; animation: spin .5s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 640px) {
+      .search-wrap input { width: 100%; }
+      .toolbar { flex-direction: column; align-items: stretch; }
+      .btn-add { justify-content: center; }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <h1>Lager<em>stöðukerfi</em></h1>
+</header>
+
+<main class="container">
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <h2>Lageryfirlit</h2>
+      <div class="search-wrap">
+        <svg class="s-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="search" placeholder="Leita…" oninput="render()">
+      </div>
+    </div>
+    <button class="btn-add" onclick="openModal()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Bæta við hlut
+    </button>
+  </div>
+
+  <!-- CARD GRID -->
+  <div class="grid" id="grid"></div>
+
+</main>
+
+<!-- MODAL -->
+<div class="overlay" id="overlay" onclick="overlayClick(event)">
+  <div class="modal">
+    <h3>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--t-dk1)" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Bæta við nýjum hlut
+    </h3>
+    <div class="fg">
+      <label>Nafn vöru</label>
+      <input type="text" id="mName" placeholder="t.d. Klósettrúllur">
+    </div>
+    <div class="fg-row">
+      <div class="fg">
+        <label>Geymsla</label>
+        <input type="number" id="mGeymsla" value="0" min="0">
+      </div>
+      <div class="fg">
+        <label>Íbúð</label>
+        <input type="number" id="mIbuad" value="0" min="0">
+      </div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal()">Hætta við</button>
+      <button class="btn-save"   onclick="addItem()">Vista hlut</button>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+<div class="saving" id="saving"><div class="spin"></div> Að vista…</div>
+
+<script>
+'use strict';
+let items = [];
+
+// SVG icons (inline, reused in cards)
+const icoBox = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8z"/>
+  <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+</svg>`;
+const icoHome = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+  <polyline points="9,22 9,12 15,12 15,22"/>
+</svg>`;
+const icoTrash = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <polyline points="3 6 5 6 21 6"/>
+  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+  <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+</svg>`;
+
+document.addEventListener('DOMContentLoaded', load);
+setInterval(load, 20000);
+
+// ── Data ──────────────────────────────────────────
+async function load() {
+  try {
+    const r = await fetch('/api/items');
+    if (!r.ok) return;
+    items = await r.json();
+    render();
+  } catch {}
+}
+
+// ── Render cards ──────────────────────────────────
+function render() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const visible = items.filter(i => i.name.toLowerCase().includes(q));
+  const grid = document.getElementById('grid');
+
+  if (items.length === 0) {
+    grid.innerHTML = `
+      <div class="empty">
+        <div class="empty-ico">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8z"/>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
+          </svg>
+        </div>
+        <h3>Engar vörur skráðar enn</h3>
+        <p>Smelltu á <strong>Bæta við hlut</strong> til að byrja</p>
+      </div>`;
+    return;
+  }
+
+  if (visible.length === 0) {
+    grid.innerHTML = `<div class="empty"><h3>Ekkert fannst</h3></div>`;
+    return;
+  }
+
+  grid.innerHTML = visible.map(item => `
+    <div class="item-card ${item.geymsla === 0 ? 'zero' : ''}" id="card${item.id}">
+
+      <div class="ic-head">
+        <input class="ic-name" value="${esc(item.name)}" title="Smelltu til að breyta nafni"
+          onblur="saveName(${item.id}, this)"
+          onkeydown="nameKey(event, ${item.id}, this)">
+        <button class="del-btn" onclick="deleteItem(${item.id}, '${esc(item.name)}')">${icoTrash}</button>
+      </div>
+
+      <div class="ic-body">
+        <div class="ic-loc g">
+          <div class="ic-loc-label">${icoBox} Geymsla</div>
+          <div class="qty">
+            <button class="qbtn minus" onclick="adj(${item.id},'geymsla',-1)">−</button>
+            <span class="qval" id="gv${item.id}" onclick="inlineEdit(${item.id},'geymsla')">${item.geymsla}</span>
+            <button class="qbtn plus"  onclick="adj(${item.id},'geymsla', 1)">+</button>
+          </div>
+        </div>
+        <div class="ic-loc i">
+          <div class="ic-loc-label">${icoHome} Íbúð</div>
+          <div class="qty">
+            <button class="qbtn minus" onclick="adj(${item.id},'ibuad',-1)">−</button>
+            <span class="qval" id="iv${item.id}" onclick="inlineEdit(${item.id},'ibuad')">${item.ibuad}</span>
+            <button class="qbtn plus"  onclick="adj(${item.id},'ibuad', 1)">+</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="ic-foot">
+        <span class="ic-total-lbl">Samtals</span>
+        <span class="ic-total-val" id="tv${item.id}">${item.samtals}</span>
+      </div>
+
+    </div>`).join('');
+}
+
+// ── Adjust quantity ───────────────────────────────
+async function adj(id, field, delta) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  const nv = Math.max(0, item[field] + delta);
+  if (nv === item[field]) return;
+  item[field] = nv;
+  item.samtals = item.geymsla + item.ibuad;
+  patchDOM(id);
+  showSaving();
+  await api('PUT', `/api/items/${id}`, { [field]: nv });
+  hideSaving();
+}
+
+function inlineEdit(id, field) {
+  const elId = field[0] === 'g' ? `gv${id}` : `iv${id}`;
+  const span = document.getElementById(elId);
+  if (!span) return;
+  const old = span.textContent;
+  const inp = Object.assign(document.createElement('input'), { type:'number', min:'0', value:old, className:'qinput' });
+  span.replaceWith(inp); inp.focus(); inp.select();
+
+  const commit = async () => {
+    const val = Math.max(0, parseInt(inp.value) || 0);
+    const ns = Object.assign(document.createElement('span'), { className:'qval', id:elId, textContent:val });
+    ns.onclick = () => inlineEdit(id, field);
+    inp.replaceWith(ns);
+    const item = items.find(i => i.id === id);
+    if (item && item[field] !== val) {
+      item[field] = val;
+      item.samtals = item.geymsla + item.ibuad;
+      patchDOM(id); showSaving();
+      await api('PUT', `/api/items/${id}`, { [field]: val });
+      hideSaving();
+    }
+  };
+  inp.onblur = commit;
+  inp.onkeydown = e => {
+    if (e.key === 'Enter') inp.blur();
+    if (e.key === 'Escape') {
+      const ns = Object.assign(document.createElement('span'), { className:'qval', id:elId, textContent:old });
+      ns.onclick = () => inlineEdit(id, field);
+      inp.replaceWith(ns);
+    }
+  };
+}
+
+function patchDOM(id) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  const gv   = document.getElementById(`gv${id}`);
+  const iv   = document.getElementById(`iv${id}`);
+  const tv   = document.getElementById(`tv${id}`);
+  const card = document.getElementById(`card${id}`);
+  if (gv)   gv.textContent = item.geymsla;
+  if (iv)   iv.textContent = item.ibuad;
+  if (tv)   tv.textContent = item.samtals;
+  if (card) {
+    card.classList.toggle('zero', item.geymsla === 0);
+  }
+}
+
+async function saveName(id, el) {
+  const name = el.value.trim();
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  if (!name) { el.value = item.name; toast('Nafn má ekki vera tómt', 'err'); return; }
+  if (name === item.name) return;
+  showSaving();
+  const res = await api('PUT', `/api/items/${id}`, { name });
+  hideSaving();
+  if (res.ok) { item.name = name; toast('Nafn uppfært', 'ok'); }
+  else el.value = item.name;
+}
+function nameKey(e, id, el) {
+  if (e.key === 'Enter') el.blur();
+  if (e.key === 'Escape') { const item = items.find(i => i.id === id); if (item) el.value = item.name; el.blur(); }
+}
+
+async function addItem() {
+  const name    = document.getElementById('mName').value.trim();
+  const geymsla = Math.max(0, parseInt(document.getElementById('mGeymsla').value) || 0);
+  const ibuad   = Math.max(0, parseInt(document.getElementById('mIbuad').value)   || 0);
+  const nameEl  = document.getElementById('mName');
+  if (!name) { nameEl.classList.add('err'); nameEl.focus(); return; }
+  nameEl.classList.remove('err');
+  const res = await api('POST', '/api/items', { name, geymsla, ibuad });
+  if (res.ok) {
+    const item = res.data;
+    item.samtals = item.geymsla + item.ibuad;
+    items.push(item);
+    items.sort((a, b) => a.name.localeCompare(b.name, 'is'));
+    render(); closeModal(); toast(`„${name}" bætt við`, 'ok');
+  } else toast(res.data?.error || 'Villa', 'err');
+}
+
+async function deleteItem(id, name) {
+  if (!confirm(`Eyða „${name}"?`)) return;
+  const res = await api('DELETE', `/api/items/${id}`);
+  if (res.ok) { items = items.filter(i => i.id !== id); render(); toast(`„${name}" eytt`, 'ok'); }
+}
+
+// ── Modal ─────────────────────────────────────────
+function openModal() {
+  ['mName','mGeymsla','mIbuad'].forEach(id => {
+    const el = document.getElementById(id);
+    el.value = id === 'mName' ? '' : '0';
+    el.classList.remove('err');
+  });
+  document.getElementById('overlay').classList.add('open');
+  setTimeout(() => document.getElementById('mName').focus(), 80);
+}
+function closeModal() { document.getElementById('overlay').classList.remove('open'); }
+function overlayClick(e) { if (e.target === document.getElementById('overlay')) closeModal(); }
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+  if (e.key === 'n' && document.activeElement === document.body && !e.ctrlKey && !e.metaKey) openModal();
+});
+document.getElementById('overlay').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') addItem();
+});
+
+// ── API / helpers ─────────────────────────────────
+async function api(method, url, body) {
+  try {
+    const r = await fetch(url, { method, headers: body ? {'Content-Type':'application/json'} : {}, body: body ? JSON.stringify(body) : undefined });
+    let data; try { data = await r.json(); } catch { data = {}; }
+    return { ok: r.ok, status: r.status, data };
+  } catch { toast('Tengingarvillla', 'err'); return { ok: false, data: {} }; }
+}
+function toast(msg, type='ok') {
+  const c = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = (type==='ok' ? '✓ ' : '✕ ') + msg;
+  c.appendChild(el); setTimeout(() => el.remove(), 2800);
+}
+function showSaving() { document.getElementById('saving').classList.add('show'); }
+function hideSaving() { setTimeout(() => document.getElementById('saving').classList.remove('show'), 400); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+</body>
+</html>
