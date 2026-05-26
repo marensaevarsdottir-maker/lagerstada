@@ -1,8 +1,44 @@
 import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from flask import Flask, render_template, jsonify, request, make_response
 from datetime import datetime
 
 app = Flask(__name__)
+
+# ── Email setup ───────────────────────────────────────────────────────────────
+GMAIL_USER = os.environ.get('GMAIL_USER', '')
+GMAIL_PASS = os.environ.get('GMAIL_PASS', '')
+EMAIL_TO   = os.environ.get('EMAIL_TO', '')
+
+def send_low_stock_email(item_name):
+    if not all([GMAIL_USER, GMAIL_PASS, EMAIL_TO]):
+        return
+    try:
+        msg = MIMEMultipart()
+        msg['From']    = GMAIL_USER
+        msg['To']      = EMAIL_TO
+        msg['Subject'] = f'⚠️ Lagerstöðukerfi – {item_name} er búið í geymslu'
+
+        body = f"""Hæ,
+
+Lagerstöðukerfið lætur þig vita að:
+
+  📦  {item_name} er komið í 0 í GEYMSLU.
+
+Vinsamlegast athugaðu hvort þörf sé á áfyllingu.
+
+– Lagerstöðukerfi
+"""
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(GMAIL_USER, GMAIL_PASS)
+            server.send_message(msg)
+    except Exception as e:
+        print(f'Email villa: {e}')
 
 # ── Database setup ────────────────────────────────────────────────────────────
 # Uses PostgreSQL on Render (DATABASE_URL), SQLite locally
@@ -152,8 +188,15 @@ def update_item(item_id):
             return jsonify({'error': 'Nafn má ekki vera tómt'}), 400
         fields.append(f'name={PH}'); values.append(name)
 
+    geymsla_goes_zero = False
     if 'geymsla' in data:
-        fields.append(f'geymsla={PH}'); values.append(max(0, int(data['geymsla'])))
+        new_geymsla = max(0, int(data['geymsla']))
+        # Check if geymsla is going to 0 — fetch old value first
+        cur.execute(f'SELECT geymsla, name FROM items WHERE id={PH}', (item_id,))
+        old = cur.fetchone()
+        if old and old['geymsla'] != 0 and new_geymsla == 0:
+            geymsla_goes_zero = old['name']
+        fields.append(f'geymsla={PH}'); values.append(new_geymsla)
 
     if 'ibuad' in data:
         fields.append(f'ibuad={PH}'); values.append(max(0, int(data['ibuad'])))
@@ -177,6 +220,11 @@ def update_item(item_id):
 
     d = row_to_dict(row)
     d['samtals'] = d['geymsla'] + d['ibuad']
+
+    # Send email if geymsla just hit 0
+    if geymsla_goes_zero:
+        send_low_stock_email(geymsla_goes_zero)
+
     return jsonify(d)
 
 
