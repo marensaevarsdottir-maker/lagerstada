@@ -1,42 +1,34 @@
 import os
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import resend
 from flask import Flask, render_template, jsonify, request, make_response
 from datetime import datetime
 
 app = Flask(__name__)
 
 # ── Email setup ───────────────────────────────────────────────────────────────
-GMAIL_USER = os.environ.get('GMAIL_USER', '')
-GMAIL_PASS = os.environ.get('GMAIL_PASS', '')
-EMAIL_TO   = os.environ.get('EMAIL_TO', '')
+resend.api_key = os.environ.get('RESEND_API_KEY', '')
+EMAIL_TO = os.environ.get('EMAIL_TO', '')
 
 def send_low_stock_email(item_name):
-    if not all([GMAIL_USER, GMAIL_PASS, EMAIL_TO]):
+    if not resend.api_key or not EMAIL_TO:
         return
     try:
-        msg = MIMEMultipart()
-        msg['From']    = GMAIL_USER
-        msg['To']      = EMAIL_TO
-        msg['Subject'] = f'⚠️ Lagerstöðukerfi – {item_name} er búið í geymslu'
-
-        body = f"""Hæ,
-
-Lagerstöðukerfið lætur þig vita að:
-
-  📦  {item_name} er komið í 0 í GEYMSLU.
-
-Vinsamlegast athugaðu hvort þörf sé á áfyllingu.
-
-– Lagerstöðukerfi
-"""
-        msg.attach(MIMEText(body, 'plain', 'utf-8'))
-
-        with smtplib.SMTP('smtp.gmail.com', 587) as server:
-            server.starttls()
-            server.login(GMAIL_USER, GMAIL_PASS)
-            server.send_message(msg)
+        resend.Emails.send({
+            "from": "Lagerstöðukerfi <onboarding@resend.dev>",
+            "to": EMAIL_TO,
+            "subject": f"⚠️ {item_name} er búið í geymslu",
+            "html": f"""
+            <div style="font-family:sans-serif;max-width:500px;margin:40px auto;padding:24px;border:1px solid #B2D8D8;border-radius:12px;">
+              <h2 style="color:#006666;margin-top:0;">📦 Lagerstöðukerfi</h2>
+              <p style="font-size:16px;">Lagerstöðukerfið lætur þig vita:</p>
+              <div style="background:#FFF5F5;border-left:4px solid #C53030;padding:16px;border-radius:8px;margin:16px 0;">
+                <strong style="color:#C53030;font-size:18px;">{item_name}</strong>
+                <p style="margin:4px 0 0;color:#555;">er komið í <strong>0</strong> í geymslu</p>
+              </div>
+              <p style="color:#718096;font-size:14px;">Vinsamlegast athugaðu hvort þörf sé á áfyllingu.</p>
+            </div>
+            """
+        })
     except Exception as e:
         print(f'Email villa: {e}')
 
